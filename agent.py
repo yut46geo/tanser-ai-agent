@@ -3,13 +3,13 @@ import requests
 import feedparser
 from google import genai
 
-# 1. ตั้งค่าคีย์และไอดีระบบผ่าน Environment Variables (เพื่อความปลอดภัย)
+# ตั้งค่าคีย์และไอดีระบบผ่าน Environment Variables
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 def get_latest_news():
-    # ดึงข่าวสารล่าสุดจาก RSS Feed ของ Sky Sports Football
+    # ดึงข่าวล่าสุดจาก RSS Feed ของ Sky Sports Football
     feed_url = "https://skysports.com" 
     feed = feedparser.parse(feed_url)
     if feed.entries:
@@ -42,6 +42,7 @@ def generate_content(news_text):
         model='gemini-2.5-flash',
         contents=prompt
     )
+    # ดึงค่าคำตอบออกมาให้ถูกต้องตามโครงสร้างใหม่
     return response.text
 
 def send_to_telegram(text, image_url):
@@ -53,17 +54,26 @@ def send_to_telegram(text, image_url):
         "caption": text,
         "parse_mode": "Markdown"
     }
-    requests.post(url, json=payload)
+    response = requests.post(url, json=payload)
+    print(f"Telegram Response: {response.text}")
 
 def main():
     try:
         news = get_latest_news()
         ai_output = generate_content(news)
         
-        # แยกเนื้อหาบทความ กับ คำสั่งเจนรูปภาพออกจากกัน
+        # แยกเนื้อหาบทความ กับ คำสั่งเจนรูปภาพออกจากกันด้วยเครื่องหมาย ---
         parts = ai_output.split("---")
-        post_content = parts[1].strip() if len(parts) > 1 else ai_output
-        image_prompt = parts[2].replace("[", "").replace("]", "").strip() if len(parts) > 2 else "Manchester United funny cartoon"
+        
+        if len(parts) >= 3:
+            post_content = parts[1].strip()
+            image_prompt = parts[2].replace("[", "").replace("]", "").strip()
+        elif len(parts) == 2:
+            post_content = parts[0].strip()
+            image_prompt = parts[1].replace("[", "").replace("]", "").strip()
+        else:
+            post_content = ai_output
+            image_prompt = "Manchester United funny cartoon"
         
         # ส่ง Prompt ไปที่ Pollinations AI เพื่อดึงลิงก์รูปภาพฟรี
         encoded_prompt = requests.utils.quote(image_prompt)
