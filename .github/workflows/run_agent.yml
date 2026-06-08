@@ -1,0 +1,32 @@
+name: Tanser AI Agent Runner
+
+on:
+  schedule:
+    # ตั้งเวลารันอัตโนมัติ 4 รอบต่อวัน (เวลาไทย: 08:00, 12:00, 17:00, และ 21:00 น.)
+    - cron: '0 1 * * *'  # 08:00 น. ไทย
+    - cron: '0 5 * * *'  # 12:00 น. ไทย
+    - cron: '0 10 * * *' # 17:00 น. ไทย
+    - cron: '0 14 * * *' # 21:00 น. ไทย
+  workflow_dispatch: # ปุ่มกดสั่งให้รันทำงานทันทีด้วยมือตัวเองได้ตลอดเวลา
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install google-genai requests feedparser
+
+      - name: Run AI Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python agent.py
