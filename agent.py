@@ -9,16 +9,17 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 def get_latest_news():
-    # ดึงข่าวล่าสุดจาก RSS Feed ของ Sky Sports Football
+    # ดึงข่าวฟุตบอลล่าสุด
     feed_url = "https://skysports.com" 
     feed = feedparser.parse(feed_url)
     if feed.entries:
         latest = feed.entries[0]
-        return f"Title: {latest.title}\nDescription: {latest.description}"
+        title = getattr(latest, 'title', 'No Title')
+        desc = getattr(latest, 'description', 'No Description')
+        return f"Title: {title}\nDescription: {desc}"
     return "No news found."
 
 def generate_content(news_text):
-    # สั่งงานสมอง Gemini ให้เขียนคอนเทนต์และคิด Prompt รูปภาพ
     client = genai.Client(api_key=GEMINI_KEY)
     
     prompt = f"""
@@ -32,9 +33,8 @@ def generate_content(news_text):
     4. ใส่แฮชแท็ก (#) ที่เกี่ยวข้องท้ายบทความ 5-7 อัน
     
     รูปแบบคำตอบ (Strict Output Format):
-    ---
     [เนื้อหาโพสต์ภาษาไทย]
-    ---
+    ===SPLIT===
     [คำสั่งสร้างภาพภาษาอังกฤษสั้นๆ เช่น A funny 3D cartoon of a sad rival football fan, comedy style]
     """
     
@@ -42,17 +42,15 @@ def generate_content(news_text):
         model='gemini-2.5-flash',
         contents=prompt
     )
-    # ดึงค่าคำตอบออกมาให้ถูกต้องตามโครงสร้างใหม่
     return response.text
 
 def send_to_telegram(text, image_url):
-    # ส่งทั้งข้อความและรูปภาพตรงเข้า Telegram ของคุณ
+    # เปลี่ยนมาส่งแบบธรรมดา ไม่ใช้ Markdown เพื่อป้องกันโค้ดอักขระพังแล้วบอทไม่ยอมส่ง
     url = f"https://telegram.org{TELEGRAM_TOKEN}/sendPhoto"
     payload = {
         "chat_id": CHAT_ID,
         "photo": image_url,
-        "caption": text,
-        "parse_mode": "Markdown"
+        "caption": text
     }
     response = requests.post(url, json=payload)
     print(f"Telegram Response: {response.text}")
@@ -62,20 +60,15 @@ def main():
         news = get_latest_news()
         ai_output = generate_content(news)
         
-        # แยกเนื้อหาบทความ กับ คำสั่งเจนรูปภาพออกจากกันด้วยเครื่องหมาย ---
-        parts = ai_output.split("---")
+        # เปลี่ยนตัวแยกเป็น ===SPLIT=== เพื่อความแม่นยำ ไม่ให้สับสนกับเครื่องหมายขีดในข่าว
+        parts = ai_output.split("===SPLIT===")
         
-        if len(parts) >= 3:
-            post_content = parts[1].strip()
-            image_prompt = parts[2].replace("[", "").replace("]", "").strip()
-        elif len(parts) == 2:
-            post_content = parts[0].strip()
-            image_prompt = parts[1].replace("[", "").replace("]", "").strip()
-        else:
-            post_content = ai_output
-            image_prompt = "Manchester United funny cartoon"
+        post_content = parts[0].strip() if len(parts) > 0 else ai_output
+        image_prompt = parts[1].strip() if len(parts) > 1 else "Manchester United funny cartoon"
         
-        # ส่ง Prompt ไปที่ Pollinations AI เพื่อดึงลิงก์รูปภาพฟรี
+        # ล้างอักขระพิเศษส่วนเกินออกจาก Prompt รูปภาพ
+        image_prompt = image_prompt.replace("[", "").replace("]", "").strip()
+        
         encoded_prompt = requests.utils.quote(image_prompt)
         image_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true"
         
